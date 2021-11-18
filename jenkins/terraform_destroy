@@ -1,0 +1,31 @@
+pipeline{
+    agent { label "test" }
+    environment {
+        AWS_DEFAULT_REGION="eu-north-1"
+        THE_BUTLER_SAYS_SO=credentials('terraform-on-aws-creds')
+    }
+    tools {
+        terraform 'terraform'
+    }
+    stages{
+        stage('Change directory to terraform'){
+            steps{
+                sh '''cd /var/lib/jenkins/terraform/
+                    terraform destroy --auto-approve -no-color
+                '''
+            }
+        }
+    }
+
+    post{
+        success{
+            echo "Terraform destroy is success"
+            telegramSend('Jenkins build is Successfull!!! job: $JOB_NAME')
+        }
+        failure{
+            echo "Terraform destroy is fail"
+            telegramSend('Jenkins build is Fail(((! job: $JOB_NAME')
+        }
+    }
+    
+}

@@ -1,0 +1,55 @@
+pipeline {
+    agent any
+    
+    stages {
+        stage('Get from GitHub') {
+            steps {
+                git branch: 'IA-188-denis-create-ansible-playbook-for-setup-application-and-database', credentialsId: 'github', url: 'git@github.com:DevOpsAcademySS/DevOpsAcademySS.git'
+            }
+        }
+        
+        stage('Gcloud auth') {
+            steps {
+                withCredentials([file(credentialsId: 'GCP_IAM_CREDS', variable: 'GCP_IAM_CREDS')]) {
+                    sh '''gcloud auth activate-service-account --key-file=${GCP_IAM_CREDS}'''
+                }
+            }
+        }
+        
+        stage('Helm repo add') {
+            steps {
+                withKubeConfig(caCertificate: '', clusterName: '', contextName: '', credentialsId: 'GCP_IAM_CREDS', namespace: '', serverUrl: '') {
+                    sh ''' helm repo add oteemocharts https://oteemo.github.io/charts && 
+                        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts && 
+                        helm repo update'''  
+                }
+            }
+        }
+        
+        stage('Decript auth json file with vault') {
+            steps {
+                ansibleVault action: 'decrypt', content: 'ansible/vault/test-and-mon-83fb16087f3a.json', input: '', installation: 'ansible', output: '', vaultCredentialsId: 'VAULT_PASSWORD_FILE'
+            }
+        }
+        
+        stage('Run Ansible playbook') {
+            steps {
+                ansiblePlaybook installation: 'ansible', playbook: 'ansible/playbook_deploy_gke.yaml'
+            }
+        }
+    }
+    post{
+        success{
+            echo "Ansible GKE with Sonarqube and monitoring deployment is successful"
+            slackSend channel: '#kbob_jenkins',
+                color: 'good',
+                message: 'Ansible GKE with Sonarqube and monitoring deployment is successful is Successul!!!'
+        }
+        failure{
+            echo "Ansible GKE with Sonarqube and monitoring deployment is fail"
+            slackSend channel: '#kbob_jenkins',
+                color: 'good',
+                message: 'Ansible GKE with Sonarqube and monitoring deployment is Fail('
+        }
+    }
+}

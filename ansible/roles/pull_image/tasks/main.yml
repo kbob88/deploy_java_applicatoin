@@ -1,0 +1,65 @@
+---
+# tasks file for pull_image
+- name: Install docker module for python
+  pip:
+    # executable: pip3
+    name: docker-py #docker==4.4.4
+
+# - name: Upgrade pip3
+#   shell: "python3.8 -m pip install docker==4.4.4"    
+
+# - name: Allow access to insecure registry
+#   lineinfile:
+#     dest: /usr/lib/systemd/system/docker.service
+#     regexp: ^ExecStart=
+#     line: ExecStart=/usr/bin/docker daemon -H fd:// --insecure-registry {{ docker_registry_address }}:8077
+
+- name: Template a file to /etc/docker/daemon.json
+  ansible.builtin.template:
+    src: /var/lib/jenkins/workspace/pull_image_to_geocitizen/ansible/roles/pull_image/templates/daemon.j2
+    dest: /etc/docker/daemon.json
+    owner: bin
+    group: wheel
+    mode: '0644'
+
+- name: restart docker
+  service:
+    name: docker
+    state: restarted
+  # notify:
+  #   - restart docker
+
+- name: Log into private registry and force re-authorization
+  docker_login:
+    registry: '{{ docker_registry_address }}:8077'
+    username: '{{ registry_user }}'
+    password: '{{ registry_pass }}'
+    reauthorize: yes
+
+# - name: pull an image
+#   docker_image:
+#     name: tomat_sv
+
+# - name: Go to the folder and execute command
+#   shell: "cd /etc/docker/"
+
+# - name: Wget the conf file for Docker
+#   shell: "wget https://github.com/DevOpsAcademySS/DevOpsAcademySS/blob/IA-188-denis-create-ansible-playbook-for-setup-application-and-database/ansible/daemon.json"
+
+# - name: start an image which is NOT present on the host yet but on the private regisrty
+#   docker_image: #docker:
+#     name: '{{ docker_registry_address }}:8077/tomcat_sv:1.75' 
+# #     registry: '{{ docker_registry_address }}:8077'
+# #     username: '{{ registry_user }}'
+# #     password: '{{ registry_pass }}'
+# #     image: '{{ docker_registry_address }}:8077/tomcat_sv'
+# #     # command: /bin/echo success
+#     state: present
+#     force: yes
+
+# - name: Load image from archive and push to a private registry
+#   docker_image:
+#     name: '{{ docker_registry_address }}:8077/tomcat_sv:1.75'
+#     # tag: '{{ tag_version }}'
+#     state: present
+#     # pull: yes

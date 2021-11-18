@@ -1,0 +1,52 @@
+pipeline {
+    agent any
+    
+    parameters{
+        string(name:'image_version',defaultValue:'0',description:'Version number of Docker image in Nexus repositori')
+        string(name:'database_ip',defaultValue:'0.0.0.0',description:'IP address of PostgreSQL')
+        string(name:'webserwer_ip',defaultValue:'0.0.0.0',description:'IP address of Tomcat server')
+    }
+    stages {
+        stage('Get from GitHub') {
+            steps {
+                git branch: 'IA-188-denis-create-ansible-playbook-for-setup-application-and-database', credentialsId: 'github', url: 'git@github.com:DevOpsAcademySS/DevOpsAcademySS.git'
+            }
+        }
+        stage("Change ip in 'hosts.txt'"){
+            steps{
+                echo "database_ip: ${params.database_ip}"
+                echo "webserwer_ip: ${params.webserwer_ip}"
+                sh """
+                sed -i "s/{{ db_ip }}/${params.database_ip}/" "./ansible/hosts.txt"
+                sed -i "s/{{ web_ip }}/${params.webserwer_ip}/" "./ansible/hosts.txt" """
+            }
+        }
+        stage('Run Ansible playbook') {
+            steps {
+                ansiblePlaybook credentialsId: 'terraform', disableHostKeyChecking: true, installation: 'ansible', inventory: 'ansible/hosts.txt', playbook: 'ansible/playbook_pull_image.yml'
+            }
+        }
+        //stage('Pull image') {
+            //steps {
+                //withCredentials([usernamePassword(credentialsId: 'nexus3-creds', passwordVariable: 'NEXUS_PASSWORD', usernameVariable: 'NEXUS_USER')]) {
+                //sh ''' docker pull 34.107.30.34:8077/tomcat_sv:${params.image_version}
+                //docker run -d --name tomcat -p 8080:8080 34.107.30.34:8077/tomcat_sv:${params.image_version}'''        
+                //}            
+            //}
+        //}
+    }
+    post{
+        success{
+            echo "Pull Docler image to Geocitizen is successful"
+            slackSend channel: '#kbob_jenkins',
+                color: 'good',
+                message: 'Pull Docler image to Geocitizen is Successul!!!'
+        }
+        failure{
+            echo "Pull Docler image to Geocitizen is fail"
+            slackSend channel: '#kbob_jenkins',
+                color: 'bed',
+                message: 'Pull Docler image to Geocitizen is Fail('
+        }
+    }
+}

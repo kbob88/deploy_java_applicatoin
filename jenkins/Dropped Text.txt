@@ -1,0 +1,1 @@
+pull_image_to_geocitizen

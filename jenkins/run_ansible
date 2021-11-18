@@ -1,0 +1,44 @@
+pipeline {
+    agent any
+    
+    parameters{
+        string(name:'database_ip',defaultValue:'0.0.0.0',description:'IP address of PostgreSQL')
+        string(name:'webserwer_ip',defaultValue:'0.0.0.0',description:'IP address of Tomcat server')
+    }
+    stages {
+        stage('Get from GitHub') {
+            steps {
+                git branch: 'IA-188-denis-create-ansible-playbook-for-setup-application-and-database', credentialsId: 'github', url: 'git@github.com:DevOpsAcademySS/DevOpsAcademySS.git'
+            }
+        }
+        stage("Change ip in 'hosts.txt'"){
+            steps{
+                echo "database_ip: ${params.database_ip}"
+                echo "webserwer_ip: ${params.webserwer_ip}"
+                sh """
+                sed -i "s/{{ db_ip }}/${params.database_ip}/" "./ansible/hosts.txt"
+                sed -i "s/{{ web_ip }}/${params.webserwer_ip}/" "./ansible/hosts.txt"
+                """
+            }
+        }
+        stage('Run Ansible playbook') {
+            steps {
+                ansiblePlaybook credentialsId: 'terraform', disableHostKeyChecking: true, installation: 'ansible', inventory: 'ansible/hosts.txt', playbook: 'ansible/playbook.yml'
+            }
+        }
+    }
+    post{
+        success{
+            echo "Ansible playbook is successful"
+            slackSend channel: '#kbob_jenkins',
+                color: 'good',
+                message: 'Ansible playbook is Successul!!!'
+        }
+        failure{
+            echo "Ansible playbook is fail"
+            slackSend channel: '#kbob_jenkins',
+                color: 'good',
+                message: 'Jenkins job Ansible playbook is Fail('
+        }
+    }
+}

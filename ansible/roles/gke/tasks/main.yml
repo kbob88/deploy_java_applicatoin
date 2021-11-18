@@ -1,0 +1,71 @@
+---
+# tasks file for gke
+- name: Create a GKE cluster
+  gcp_container_cluster:
+    name: "{{ cluster_name }}"
+    initial_node_count: "{{ initial_node_count }}"
+    node_config:
+      machine_type: e2-medium
+      disk_size_gb: 50
+    location: "{{ gcp_zone }}"
+    project: "{{ gcp_project }}"
+    auth_kind: serviceaccount
+    service_account_file: "{{ gcp_cred_file }}"
+    state: "{{ cluster_state }}"
+  register: cluster
+
+- name: Create a node pool
+  gcp_container_node_pool:
+    name: pool-sonar
+    initial_node_count: "{{ initial_node_count }}"
+    cluster: "{{ cluster }}" 
+    location: "{{ gcp_zone }}"
+    project: "{{ gcp_project }}"
+    auth_kind: serviceaccount
+    service_account_file: "{{ gcp_cred_file }}"
+    state: "{{ cluster_state }}"
+
+- name: Connect to cluster (update kubeconfig)
+  shell: "gcloud container clusters get-credentials {{ cluster.name }} --zone {{ gcp_zone }} --project {{ gcp_project }}"
+  when: cluster_state == "present"
+
+- name: Deploy with Helm Sonarqube + Postgres
+  community.kubernetes.helm:
+    name: testing
+    # repo_url: https://oteemo.github.io/charts
+    chart_ref: oteemocharts/sonarqube
+    release_namespace: sonar
+    create_namespace: true
+
+- name: Deploy with Helm kube-prometheus-stack
+  community.kubernetes.helm:
+    name: monitoring
+    # repo_url: https://prometheus-community.github.io/helm-charts
+    chart_ref: prometheus-community/kube-prometheus-stack
+    chart_version: 19.2.3
+    release_namespace: monitoring
+    create_namespace: true
+
+- name: Create a Deployment prometheusservicelevels from a manifest file
+  community.kubernetes.k8s:
+    state: absent
+    namespace: monitoring
+    src: /home/kbob/Desktop/study/sloth/pkg/kubernetes/gen/crd/sloth.slok.dev_prometheusservicelevels.yaml
+
+- name: Create a Deployment prometheus-operator from a manifest file
+  community.kubernetes.k8s:
+    state: absent
+    namespace: monitoring
+    src: /home/kbob/Desktop/study/sloth/test/integration/crd/prometheus-operator-crd.yaml
+
+- name: Create a Deployment sloth from a manifest file
+  community.kubernetes.k8s:
+    state: absent
+    namespace: monitoring
+    src: /home/kbob/Desktop/study/sloth/deploy/kubernetes/raw/sloth.yaml
+
+- name: Create a Deployment sloth-with-common-plugins from a manifest file
+  community.kubernetes.k8s:
+    state: absent
+    namespace: monitoring
+    src: /home/kbob/Desktop/study/sloth/deploy/kubernetes/raw/sloth-with-common-plugins.yaml

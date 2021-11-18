@@ -1,0 +1,71 @@
+def database_ip = '0'
+def webserwer_ip = '0'
+pipeline {
+     agent { 
+        label "test" 
+    }
+    environment {
+        AWS_DEFAULT_REGION="eu-north-1"
+        THE_BUTLER_SAYS_SO=credentials('terraform-on-aws-creds')
+    }
+    tools {
+        terraform 'terraform'
+    }
+    stages {
+        stage('Get from GitHub') {
+            steps {
+                git branch: 'IA-187-denis-create-terraform-plan-for-creating-2-vm-s-on-aws', credentialsId: 'github', url: 'git@github.com:DevOpsAcademySS/DevOpsAcademySS.git'
+            }
+        }
+        stage('Terraform init') {
+            steps {
+                sh '''cd /var/lib/jenkins/workspace/terraform/terraform/
+                    terraform init -no-color
+                    '''
+            }            
+        }
+        stage('Terraform apply') {
+            steps {
+                sh '''cd /var/lib/jenkins/workspace/terraform/terraform/
+                    terraform apply --auto-approve -no-color
+                    '''
+            }            
+        }
+        // stage("Copy txt files to workspace"){
+        //     steps{
+        //         sh ''' cd /var/lib/jenkins/workspace/terraform/
+        //         cp db_ip.txt /var/lib/jenkins/workspace/$JOB_NAME/
+        //         cp ws_ip.txt /var/lib/jenkins/workspace/$JOB_NAME/
+        //         '''
+        //     }
+        // }
+        stage("Save IP's in environment variables"){
+            steps{
+                script {
+                    database_ip = readFile('terraform/db_ip.txt').trim()
+                    webserwer_ip = readFile('terraform/ws_ip.txt').trim()
+                }
+                echo "database_ip: ${database_ip}"
+                echo "webserwer_ip: ${webserwer_ip}"
+            }
+        }
+    }
+    post {
+        success {
+            echo "Terraform apply success!!!"
+            script {
+                build job: 'build-geocitizen-to-nexuxs', parameters: [string(name: 'database_ip', value: String.valueOf(database_ip)), string(name: 'webserwer_ip', value: String.valueOf(webserwer_ip))], wait: false
+                build job: 'run_ansible', parameters: [string(name: 'database_ip', value: String.valueOf(database_ip)), string(name: 'webserwer_ip', value: String.valueOf(webserwer_ip))], wait: false
+            }
+            slackSend channel: '#kbob_jenkins',
+                color: 'good',
+                message: 'Jenkins job Terraform apply is Successfull!!!'
+        }
+        failure{
+            echo "Terraform apply is fail!"
+            slackSend channel: '#kbob_jenkins',
+                color: 'good',
+                message: 'Jenkins job Terraform apply is Fail('
+        }
+    }
+}

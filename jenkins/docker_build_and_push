@@ -1,0 +1,66 @@
+pipeline {
+    agent any
+    
+    environment {
+        IMG_VERSION = '1.0.${BUILD_NUMBER}'
+    }
+    parameters{
+        string(name:'version_geo_build',defaultValue:'0',description:'Version number of geocitizen.war in Nexus repositori')
+        string(name:'database_ip',defaultValue:'0.0.0.0',description:'IP address of PostgreSQL')
+        string(name:'webserwer_ip',defaultValue:'0.0.0.0',description:'IP address of Tomcat server')
+    }
+
+    stages {
+        stage('Clone of the Geocitizen'){
+            steps{
+                git branch: 'IA-228-denis-containerization-geocitizen-and-delivery-to-artifactory', credentialsId: 'github', url: 'git@github.com:DevOpsAcademySS/DevOpsAcademySS.git'
+            }
+        }
+        stage('Pull Geocitizen war file from Nexus'){
+            steps{
+                withCredentials([usernamePassword(credentialsId: 'nexus3-creds', passwordVariable: 'NEXUS_PASSWORD', usernameVariable: 'NEXUS_USER')]) {
+                    sh ''' cd dockerfile
+                    curl -u NEXUS_USER:NEXUS_PASSWORD -o geocitizen.war \
+                    "http://34.107.30.34:8081/com/softserveinc/geo-citizen/1.0.${version_geo_build}/geocitizen-1.0.${version_geo_build}.war" -L '''
+                }
+            }
+        }
+        stage('Docker build'){
+            steps{
+                withCredentials([usernamePassword(credentialsId: 'nexus3-creds', passwordVariable: 'NEXUS_PASSWORD', usernameVariable: 'NEXUS_USER')]) {
+                    sh '''cd dockerfile
+                        docker build -t tomcat_sv:1.${BUILD_NUMBER} .
+                        docker login -u $NEXUS_USER -p $NEXUS_PASSWORD 34.107.30.34:8077
+                        docker tag tomcat_sv:1.${BUILD_NUMBER} 34.107.30.34:8077/tomcat_sv:1.${BUILD_NUMBER}
+                        docker push 34.107.30.34:8077/tomcat_sv:1.${BUILD_NUMBER}'''
+                }
+            }
+        }
+    }
+    post{
+        success{
+            echo "Docker build and push to Nexus is successful"
+            script {
+                build job: 'pull_image_to_geocitizen', 
+                parameters: [
+                    string(name: 'database_ip',
+                    value: String.valueOf(database_ip)),
+                    string(name: 'webserwer_ip',
+                    value: String.valueOf(webserwer_ip)),
+                    string(name: 'image_version',
+                    value: String.valueOf(IMG_VERSION))], wait: false
+            }
+            slackSend channel: '#kbob_jenkins',
+                color: 'good',
+                timestamp: 'true',
+                message: 'Docker build and push to Nexus is Successul!!!'
+        }
+        failure{
+            echo "Docker build and push to Nexus is fail"
+            slackSend channel: '#kbob_jenkins',
+                color: 'good',
+                timestamp: 'true',
+                message: 'Docker build and push to Nexus is Fail('
+        }
+    }
+}
